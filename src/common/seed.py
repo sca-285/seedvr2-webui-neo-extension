@@ -22,9 +22,15 @@ from .distributed import get_global_rank
 
 def set_seed(seed: Optional[int], same_across_ranks: bool = False):
     """Function that sets the seed for pseudo-random number generators."""
-    if seed is not None:
-        seed += get_global_rank() if not same_across_ranks else 0
-        random.seed(seed)
-        np.random.seed(seed)
-        torch.manual_seed(seed)
-
+    if seed is None:
+        return
+    seed = int(seed)
+    if not same_across_ranks:
+        seed += get_global_rank()
+    random.seed(seed)
+    # NumPy's legacy seeding only accepts 0..2**32-1, and the VAE phase seeds
+    # with seed + 1_000_000, which overflows for WebUI seeds near the top of
+    # that range.
+    np.random.seed(seed % (2**32))
+    # torch takes the full 64-bit range and seeds every CUDA device as well.
+    torch.manual_seed(seed % (2**64))
