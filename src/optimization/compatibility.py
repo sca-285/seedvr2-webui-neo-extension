@@ -9,6 +9,23 @@ Extracted from: seedvr2.py (lines 1045-1630)
 import sys
 import types
 import importlib.machinery
+import importlib.util
+
+
+def _is_installed(name: str) -> bool:
+    """True if a top-level package can be found, without importing it.
+
+    The stubs below exist to paper over packages that are installed but broken
+    (bad DLLs, mismatched CUDA builds). A package that simply isn't installed
+    needs no stub: diffusers already treats it as unavailable. Stubbing it
+    anyway plants a fake module in sys.modules that makes find_spec() succeed,
+    so the host app (WebUI Forge/reForge/Neo, transformers, diffusers) then
+    believes flash-attn or bitsandbytes is present and fails when it uses it.
+    """
+    try:
+        return importlib.util.find_spec(name) is not None
+    except (ImportError, ValueError):
+        return False
 
 
 def ensure_triton_compat():
@@ -40,6 +57,8 @@ def ensure_flash_attn_safe():
     """
     if 'flash_attn' in sys.modules:
         return  # Already loaded
+    if not _is_installed('flash_attn'):
+        return  # Not installed - nothing to protect against
     
     try:
         import flash_attn
@@ -63,6 +82,8 @@ def ensure_xformers_flash_compat():
     """
     if 'xformers._C_flashattention' in sys.modules:
         return  # Already loaded
+    if not _is_installed('xformers'):
+        return  # Not installed - nothing to protect against
     
     try:
         from xformers import _C_flashattention  # noqa: F401
@@ -94,6 +115,8 @@ def ensure_bitsandbytes_safe():
     """
     if 'bitsandbytes' in sys.modules:
         return  # Already loaded or stubbed
+    if not _is_installed('bitsandbytes'):
+        return  # Not installed - nothing to protect against
     
     try:
         import bitsandbytes
